@@ -10,14 +10,15 @@ formats happens inside the CLI via a custom fetch interceptor.
 
 1. [How it works](#how-it-works)
 2. [Running from source](#running-from-source)
-3. [Environment variables](#environment-variables)
-4. [Quickstart](#quickstart)
-5. [Wrapper script](#wrapper-script)
-6. [OAuth token lifecycle](#oauth-token-lifecycle)
-7. [What gets translated](#what-gets-translated)
-8. [Debugging](#debugging)
-9. [Limitations](#limitations)
-10. [Comparison with Option 1 (LiteLLM proxy)](#comparison-with-option-1-litellm-proxy)
+3. [Coexisting with the installed Claude Code](#coexisting-with-the-installed-claude-code)
+4. [Environment variables](#environment-variables)
+5. [Quickstart](#quickstart)
+6. [Wrapper script](#wrapper-script)
+7. [OAuth token lifecycle](#oauth-token-lifecycle)
+8. [What gets translated](#what-gets-translated)
+9. [Debugging](#debugging)
+10. [Limitations](#limitations)
+11. [Comparison with Option 1 (LiteLLM proxy)](#comparison-with-option-1-litellm-proxy)
 
 ---
 
@@ -123,6 +124,57 @@ alias claude-dev="bun /path/to/this/repo/src/main.tsx"
 echo '#!/usr/bin/env bash\nexec bun /path/to/this/repo/src/main.tsx "$@"' > ~/bin/claude-dev
 chmod +x ~/bin/claude-dev
 ```
+
+---
+
+## Coexisting with the installed Claude Code
+
+Running the fork from source **does not touch your installed `claude` binary** and
+requires no extra configuration to pick up your existing settings and MCPs.
+
+### How config is resolved
+
+Claude Code resolves two paths at startup:
+
+| Path | What it stores | Env override |
+|---|---|---|
+| `~/.claude.json` | Auth tokens, global config | `CLAUDE_CONFIG_DIR` (changes the directory, filename stays `.claude.json`) |
+| `~/.claude/` | `settings.json`, MCP servers, memory, project data | `CLAUDE_CONFIG_DIR` |
+
+Both paths default to your home directory / `~/.claude/`. The fork reads from
+the exact same locations as the installed CLI, so **your login session, MCP
+servers, settings, and memory are automatically shared** — no re-login or
+reconfiguration needed.
+
+### Running both side by side
+
+```
+Terminal A                          Terminal B
+──────────────────────────          ──────────────────────────
+claude                              bun /path/to/fork/src/main.tsx
+  (installed CLI, Anthropic API)      (fork, your internal backend)
+  reads ~/.claude/                    reads ~/.claude/
+```
+
+Both processes read from the same config, but they are independent — one does
+not affect the other's runtime state. Concurrent writes to `~/.claude.json` are
+guarded by a file lock inside the app, so simultaneous sessions are safe.
+
+### Isolating the fork (optional)
+
+If you want the fork to use a completely separate config — for example, to test
+with different MCP servers or a different login — point `CLAUDE_CONFIG_DIR` at a
+new directory:
+
+```bash
+export CLAUDE_CONFIG_DIR=~/.claude-internal
+
+# First run: a fresh config directory is created automatically
+bun /path/to/fork/src/main.tsx
+```
+
+With isolation, the fork has its own auth, settings, and MCPs, and the installed
+`claude` is completely unaffected.
 
 ---
 
