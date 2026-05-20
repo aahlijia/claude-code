@@ -297,6 +297,22 @@ export async function getAnthropicClient({
     return new AnthropicVertex(vertexArgs) as unknown as Anthropic
   }
 
+  if (isEnvTruthy(process.env.CLAUDE_CODE_USE_OPENAI_COMPAT)) {
+    const { makeAnthropicToOpenAIFetch, fetchOpenAICompatToken } = await import(
+      './openai-compat.js'
+    )
+    const translatingFetch = makeAnthropicToOpenAIFetch(
+      process.env.OPENAI_COMPAT_BASE_URL!,
+      fetchOpenAICompatToken,
+    )
+    return new Anthropic({
+      ...ARGS,
+      apiKey: 'unused',
+      fetch: translatingFetch,
+      ...(isDebugToStdErr() && { logger: createStderrLogger() }),
+    })
+  }
+
   // Determine authentication method based on available tokens
   const clientConfig: ConstructorParameters<typeof Anthropic>[0] = {
     apiKey: isClaudeAISubscriber() ? null : apiKey || getAnthropicApiKey(),
